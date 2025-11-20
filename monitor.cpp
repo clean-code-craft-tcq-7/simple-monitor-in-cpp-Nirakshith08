@@ -1,38 +1,105 @@
-#include "./monitor.h"
-#include <assert.h>
-#include <thread>
-#include <chrono>
 #include <iostream>
-using std::cout, std::flush, std::this_thread::sleep_for, std::chrono::seconds;
+#include <string>
+#include <cassert>
+using namespace std;
 
-int vitalsOk(float temperature, float pulseRate, float spo2) {
-  if (temperature > 102 || temperature < 95) {
-    cout << "Temperature is critical!\n";
-    for (int i = 0; i < 6; i++) {
-      cout << "\r* " << flush;
-      sleep_for(seconds(1));
-      cout << "\r *" << flush;
-      sleep_for(seconds(1));
+//  Enum for breach type
+enum class BreachType {
+    NORMAL,
+    TOO_LOW,
+    TOO_HIGH
+};
+
+//  Pure function to check value against limits, returns breach type
+BreachType checkBreach(float value, float lowerLimit, float upperLimit) {
+    if (value < lowerLimit) return BreachType::TOO_LOW;
+    if (value > upperLimit) return BreachType::TOO_HIGH;
+    return BreachType::NORMAL;
+}
+
+//  Pure functions for each parameter returning breach
+BreachType checkTemperature(float temperature) {
+    return checkBreach(temperature, 0, 45);
+}
+
+BreachType checkSoc(float soc) {
+    return checkBreach(soc, 20, 80);
+}
+
+BreachType checkChargeRate(float chargeRate) {
+    return (chargeRate > 0.8) ? BreachType::TOO_HIGH : BreachType::NORMAL;
+}
+
+//  Function to convert breach enum to string for messages
+string breachTypeToString(BreachType breach) {
+    switch (breach) {
+        case BreachType::TOO_LOW: return "too low";
+        case BreachType::TOO_HIGH: return "too high";
+        default: return "normal";
     }
-    return 0;
-  } else if (pulseRate < 60 || pulseRate > 100) {
-    cout << "Pulse Rate is out of range!\n";
-    for (int i = 0; i < 6; i++) {
-      cout << "\r* " << flush;
-      sleep_for(seconds(1));
-      cout << "\r *" << flush;
-      sleep_for(seconds(1));
+}
+
+//  I/O function to print breach messages (side effect separated)
+void printBreachMessage(const string& parameter, BreachType breach) {
+    if (breach != BreachType::NORMAL) {
+        cout << parameter << " is " << breachTypeToString(breach) << "!" << endl;
     }
+}
+
+//  Checks battery and prints messages, returns overall OK status
+bool batteryIsOk(float temperature, float soc, float chargeRate) {
+    BreachType tempBreach = checkTemperature(temperature);
+    BreachType socBreach = checkSoc(soc);
+    BreachType chargeRateBreach = checkChargeRate(chargeRate);
+
+    printBreachMessage("Temperature", tempBreach);
+    printBreachMessage("State of Charge", socBreach);
+    printBreachMessage("Charge Rate", chargeRateBreach);
+
+    return (tempBreach == BreachType::NORMAL) && 
+           (socBreach == BreachType::NORMAL) && 
+           (chargeRateBreach == BreachType::NORMAL);
+}
+
+//  --- Tests ---
+
+void testCheckBreach() {
+    assert(checkBreach(5, 0, 10) == BreachType::NORMAL);
+    assert(checkBreach(-1, 0, 10) == BreachType::TOO_LOW);
+    assert(checkBreach(11, 0, 10) == BreachType::TOO_HIGH);
+}
+
+void testBatteryIsOk() {
+    //  All normal values
+    assert(batteryIsOk(25, 70, 0.7) == true);
+
+    //  Temperature too high
+    assert(batteryIsOk(50, 70, 0.7) == false);
+
+    //  Temperature too low
+    assert(batteryIsOk(-1, 70, 0.7) == false);
+
+    //  SOC too low
+    assert(batteryIsOk(25, 10, 0.7) == false);
+
+    //  SOC too high
+    assert(batteryIsOk(25, 90, 0.7) == false);
+
+    //  Charge rate too high
+    assert(batteryIsOk(25, 70, 0.9) == false);
+
+    //  Multiple breaches
+    assert(batteryIsOk(-5, 10, 0.9) == false);
+}
+
+int main() {
+    testCheckBreach();
+    testBatteryIsOk();
+
+    cout << "All tests passed!" << endl;
+
+    // Example run to see printout
+    batteryIsOk(50, 85, 0.9); // should print all breach messages
+
     return 0;
-  } else if (spo2 < 90) {
-    cout << "Oxygen Saturation out of range!\n";
-    for (int i = 0; i < 6; i++) {
-      cout << "\r* " << flush;
-      sleep_for(seconds(1));
-      cout << "\r *" << flush;
-      sleep_for(seconds(1));
-    }
-    return 0;
-  }
-  return 1;
 }
